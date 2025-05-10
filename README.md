@@ -165,4 +165,4 @@ Untuk informasi lebih lanjut atau bantuan, silakan hubungi [@anggaran_apbn](http
 
 ---
 
-© 2024 Menfess Bot - Untuk penggunaan pribadi dan non-komersial.
+© 2025 Menfess Bot - Untuk penggunaan pribadi dan non-komersial.
