@@ -51,14 +51,14 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
                     MenfessData menfessData = retrieveMenfessData(messageId);
                     Message message = processMessage(menfessData, telegramClient);
                     String successMessage = String.format(
-														"""
-																		🚀 *Pesan Berhasil Terkirim!*
-																		
-																		✅ Pesan menfess kamu sudah terkirim ke channel
-																		
-																		🔗 *Lihat Pesan:* https://t.me/%s/%s""",
-                            channelUsername, message.getMessageId().toString()
-                    );
+                           """
+                           🚀 <b>Pesan Berhasil Terkirim!</b>
+                           
+                           ✅ Pesan menfess kamu sudah terkirim ke channel
+                           
+                           🔗 <b>Lihat Pesan:</b> https://t.me/%s/%s""",
+                           channelUsername, message.getMessageId().toString()
+                   );
 
                     editMessageSuccessSendMenfess(
                             update.getCallbackQuery().getMessage().getChatId(),
