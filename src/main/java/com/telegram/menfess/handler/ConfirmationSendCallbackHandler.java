@@ -10,6 +10,7 @@ import com.telegram.menfess.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -32,6 +33,9 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
     @Value("${channel.id}")
     private String channelId;
 
+    @Value("${channel.username}")
+    private String channelUsername;
+
     @Override
     public String callbackPrefix() {
         return CALLBACK_PREFIX;
@@ -42,9 +46,31 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
     public CompletableFuture<Void> process(Update update, TelegramClient telegramClient) {
         return CompletableFuture.runAsync(() -> {
             try {
-                String messageId = extractMessageId(update);
-                MenfessData menfessData = retrieveMenfessData(messageId);
-                processMessage(menfessData, telegramClient);
+                if (update.getCallbackQuery().getData() != null) {
+                    String messageId = extractMessageId(update);
+                    MenfessData menfessData = retrieveMenfessData(messageId);
+                    Message message = processMessage(menfessData, telegramClient);
+                    String successMessage = String.format(
+														"""
+																		🚀 *Pesan Berhasil Terkirim!*
+																		
+																		✅ Pesan menfess kamu sudah terkirim ke channel
+																		
+																		🔗 *Lihat Pesan:* https://t.me/%s/%s""",
+                            channelUsername, message.getMessageId().toString()
+                    );
+
+                    editMessageSuccessSendMenfess(
+                            update.getCallbackQuery().getMessage().getChatId(),
+                            update.getCallbackQuery().getMessage().getMessageId(),
+                            successMessage,
+                            null,
+                            telegramClient
+                    );
+                } else {
+                    log.warn("Update is not a user message");
+                }
+
             } catch (Exception e) {
                 log.error("Error processing confirmation callback: ", e);
                 handleError(update, telegramClient);
@@ -70,7 +96,7 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
         return data;
     }
 
-    private void processMessage(MenfessData data, TelegramClient telegramClient) {
+    private Message processMessage(MenfessData data, TelegramClient telegramClient) {
         String formattedMessage = formatMessage(data.getCaption());
 
         MessageSender messageSender = getMessageSender(data.getType());
@@ -78,7 +104,9 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
 
         if (sentMessage != null) {
             saveMessageAndCleanup(data, sentMessage);
+
         }
+        return sentMessage;
     }
 
     private MessageSender getMessageSender(FileType type) {
@@ -93,26 +121,44 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
         return MENFESS_HEADER + (caption != null ? caption : "");
     }
 
-    private void saveMessageAndCleanup(MenfessData data, Message sentMessage) {
-        try {
-            User user = userService.saveUser(User.builder()
-                    .id(data.getChatId())
-                    .username(null)
-                    .build());
 
-            Messages messages = Messages.builder()
-                    .createdAt(System.currentTimeMillis())
-                    .messageId(String.valueOf(sentMessage.getMessageId()))
-                    .isDeleted(false)
-                    .id(user)
-                    .build();
+    protected void saveMessageAndCleanup(MenfessData data, Message sentMessage) {
+        int maxRetries = 3;
+        for (int retries = 0; retries < maxRetries; retries++) {
+            try {
+                User user = userService.saveUser(User.builder()
+                        .id(data.getChatId())
+                        .username(null)
+                        .build());
 
-            messageService.saveMessage(messages);
-            menfessDataService.deleteDataById(data.getId());
-        } catch (Exception e) {
-            log.error("Error saving message: ", e);
+                Messages messages = Messages.builder()
+                        .messageId(sentMessage.getMessageId())
+                        .deleted(false)
+                        .text(sentMessage.getText() != null ? sentMessage.getText() : sentMessage.getCaption())
+                        .user(user)
+                        .build();
+
+                messageService.saveMessage(messages);
+                menfessDataService.deleteDataById(data.getId());
+                return;
+            } catch (ObjectOptimisticLockingFailureException e) {
+                if (retries >= maxRetries - 1) {
+                    log.error("Error Locking");
+                    throw e;
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                    log.error("Thread interrupted: ", interruptedException);
+                    throw new RuntimeException(interruptedException);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
     }
+
 
     private void handleError(Update update, TelegramClient telegramClient) {
         if (update.getCallbackQuery() != null && update.getCallbackQuery().getMessage() != null) {

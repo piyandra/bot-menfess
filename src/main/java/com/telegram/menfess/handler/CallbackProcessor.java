@@ -5,9 +5,11 @@ import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
 import org.telegram.telegrambots.meta.api.methods.send.SendVideo;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.concurrent.CompletableFuture;
@@ -31,6 +33,20 @@ public interface CallbackProcessor {
         } catch (Exception e) {
             log.error("Error sending message: {}", e.getMessage());
             return null;
+        }
+    }
+
+    default void editMessageSuccessSendMenfess(long chatId, int messageId, String text, InlineKeyboardMarkup inlineKeyboardMarkup, TelegramClient telegramClient) {
+        try {
+            EditMessageText message = EditMessageText.builder()
+                    .messageId(messageId)
+                    .chatId(chatId)
+                    .text(text)
+                    .replyMarkup(inlineKeyboardMarkup)
+                    .build();
+            telegramClient.execute(message);
+        } catch (Exception e) {
+            log.error("Error sending message: {}", e.getMessage());
         }
     }
     default Message sendMessageWithPhoto(long chatId, String photoId, String caption, TelegramClient telegramClient) {
