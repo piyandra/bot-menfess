@@ -19,9 +19,13 @@ public class User {
 
     private String username;
 
-    @OneToMany(mappedBy = "id")
+    @OneToMany(mappedBy = "user", cascade = CascadeType.REMOVE)
     private List<Messages> messages;
 
     @OneToMany(mappedBy = "user")
     private List<RepliedMessage> repliedMessages;
+
+    private boolean isJoined;
+
+    private Long joinUntil;
 }

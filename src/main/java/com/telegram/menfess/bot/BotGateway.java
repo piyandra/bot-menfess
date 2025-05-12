@@ -16,18 +16,20 @@ public class BotGateway {
 
     private final TelegramClient telegramClient;
 
-    private final String botToken;
-    private final CommandHandler commandHandler;
+	private final CommandHandler commandHandler;
     private final CallbackHandler callbackHandler;
 
+
     public BotGateway(@Value("${bot.token}")String botToken, CommandHandler commandHandler, CallbackHandler callbackHandler) {
-        this.botToken = botToken;
-        this.commandHandler = commandHandler;
+		this.commandHandler = commandHandler;
         this.callbackHandler = callbackHandler;
         this.telegramClient = new OkHttpTelegramClient(botToken);
     }
     @Async
     public CompletableFuture<Void> process(Update update) {
+        if (update == null) {
+            return CompletableFuture.completedFuture(null);
+        }
         if (!update.hasCallbackQuery()) {
             commandHandler.handleCommandHandler(update, telegramClient);
         } else if (update.hasCallbackQuery()) {

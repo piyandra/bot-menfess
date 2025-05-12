@@ -50,4 +50,25 @@ public class ButtonConfirmation {
         inlineKeyboardRows.add(inlineKeyboardRow);
         return InlineKeyboardMarkup.builder().keyboard(inlineKeyboardRows).build();
     }
+    public InlineKeyboardMarkup notJoinedChannel(String channelUsername, String callbackData) {
+
+
+        List<InlineKeyboardRow> inlineKeyboardRows = new ArrayList<>();
+        InlineKeyboardRow inlineKeyboardRow = new InlineKeyboardRow();
+
+        inlineKeyboardRow.add(InlineKeyboardButton
+                .builder()
+                        .url(String.format("https://t.me/%s", channelUsername))
+                        .text("Join Disini")
+                .build());
+        inlineKeyboardRow.add(InlineKeyboardButton
+                .builder()
+                .callbackData("send_" + callbackData)
+                .text("Coba Lagi")
+                .build());
+
+
+        inlineKeyboardRows.add(inlineKeyboardRow);
+        return InlineKeyboardMarkup.builder().keyboard(inlineKeyboardRows).build();
+    }
 }

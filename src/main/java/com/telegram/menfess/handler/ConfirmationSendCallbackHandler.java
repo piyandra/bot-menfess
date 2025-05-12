@@ -4,9 +4,11 @@ import com.telegram.menfess.entity.FileType;
 import com.telegram.menfess.entity.MenfessData;
 import com.telegram.menfess.entity.Messages;
 import com.telegram.menfess.entity.User;
+import com.telegram.menfess.service.JoinedUserService;
 import com.telegram.menfess.service.MenfessDataService;
 import com.telegram.menfess.service.MessageService;
 import com.telegram.menfess.service.UserService;
+import com.telegram.menfess.utils.ButtonConfirmation;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,6 +19,7 @@ import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
@@ -30,6 +33,8 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
     private final MenfessDataService menfessDataService;
     private final MessageService messageService;
     private final UserService userService;
+    private final JoinedUserService joinedUserService;
+    private final ButtonConfirmation buttonConfirmation;
     @Value("${channel.id}")
     private String channelId;
 
@@ -45,6 +50,12 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
     @Async
     public CompletableFuture<Void> process(Update update, TelegramClient telegramClient) {
         return CompletableFuture.runAsync(() -> {
+            log.info("Processing confirmation callback: {}", update.getCallbackQuery().getData());
+            if (!joinedUserService.getJoinedUsers(update.getCallbackQuery().getFrom().getId(), telegramClient)) {
+                log.warn("User is not joined to the channel");
+                editMessageSuccessSendMenfess(update.getCallbackQuery().getFrom().getId(), update.getCallbackQuery().getMessage().getMessageId(), randomMessageNotJoin(), buttonConfirmation.notJoinedChannel(channelUsername, update.getCallbackQuery().getData().replace(CALLBACK_PREFIX + "_", "")), telegramClient);
+                return;
+            }
             try {
                 if (update.getCallbackQuery().getData() != null) {
                     String messageId = extractMessageId(update);
@@ -172,5 +183,18 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
     @FunctionalInterface
     private interface MessageSender {
         Message sendMessage(MenfessData data, String message, TelegramClient client);
+    }
+
+    private String randomMessageNotJoin() {
+        String[] messages = {
+                "🤔 Kamu belum join channel kita, bro! Jangan malu-malu, klik link di bawah ini dulu ya sebelum melangkah lebih jauh.",
+                "🚧 Eh, kamu nih! Kayaknya belum join channel kita. Yuk, klik tombol Join Disini biar bisa lanjut kirim pesan.",
+                "🔒 Jangan lupa ya, join dulu channel kita supaya pesanmu bisa sampai ke sana. Jangan sampai nyasar, nanti jadi rahasia umum!",
+                "🛑 Kamu belum join nih. Biar pesanmu aman dan sampai ke tempatnya, yuk klik link join dulu, ya!",
+                "🙈 Hmm, kayaknya kamu harus join channel dulu nih, biar pesanmu nggak nyasar ke tempat yang salah. Klik Join Disini dulu, ya!"
+        };
+        Random random = new Random();
+        int index = random.nextInt(messages.length);
+        return messages[index];
     }
 }
