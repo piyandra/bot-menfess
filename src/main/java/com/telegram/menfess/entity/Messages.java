@@ -17,7 +17,9 @@ public class Messages {
     @ManyToOne
     @JoinColumn(name = "user_id")
     private User user;
-    
     private boolean deleted;
     private String text;
+
+    @Enumerated(EnumType.STRING)
+    private FileType type;
 }

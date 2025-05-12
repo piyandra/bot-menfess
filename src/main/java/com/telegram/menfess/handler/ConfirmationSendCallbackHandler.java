@@ -111,7 +111,8 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
 
     private MessageSender getMessageSender(FileType type) {
         return switch (type) {
-            case TEXT -> (data, message, client) -> sendMessage(Long.parseLong(channelId), message, client);
+			case AUDIO -> ((data, message, client) -> sendAudio(Long.parseLong(channelId), data.getFileId(), message, client));
+			case TEXT -> (data, message, client) -> sendMessage(Long.parseLong(channelId), message, client);
             case PHOTOS -> (data, message, client) -> sendMessageWithPhoto(Long.parseLong(channelId), data.getFileId(), message, client);
             case VIDEOS -> (data, message, client) -> sendVideo(Long.parseLong(channelId), data.getFileId(), message, client);
         };
@@ -136,6 +137,7 @@ public class ConfirmationSendCallbackHandler implements CallbackProcessor {
                         .deleted(false)
                         .text(sentMessage.getText() != null ? sentMessage.getText() : sentMessage.getCaption())
                         .user(user)
+                        .type(data.getType())
                         .build();
 
                 messageService.saveMessage(messages);
