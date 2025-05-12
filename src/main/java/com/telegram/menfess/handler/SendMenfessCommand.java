@@ -20,12 +20,9 @@ import org.telegram.telegrambots.meta.api.objects.messageorigin.MessageOriginCha
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
-import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
@@ -45,8 +42,6 @@ public class SendMenfessCommand implements CommandProcessor {
     @Value("${channel.username}")
     private String channelUsername;
 
-    @Value("${default.hashtag}")
-    private String hashtag;
 
     @Value("${owner.id}")
     private String ownerId;
@@ -54,14 +49,7 @@ public class SendMenfessCommand implements CommandProcessor {
     @Value("${channel.id}")
     private String channelId;
 
-    private List<String> list = new ArrayList<>();
-    
-    @PostConstruct
-    public void init() {
-        if (hashtag != null) {
-            list = Arrays.stream(hashtag.split(",")).toList();
-        }
-    }
+
 
     @Override
     public String commands() {
@@ -91,8 +79,7 @@ public class SendMenfessCommand implements CommandProcessor {
             }
 
             if (!isValidMessage(messageText)
-                    || !message.isUserMessage()
-                    || Arrays.stream(messageText.split("\\s+")).noneMatch(list::contains)) {
+                    || !message.isUserMessage()) {
                 return;
             }
 
@@ -193,9 +180,7 @@ public class SendMenfessCommand implements CommandProcessor {
                             
                             Pesan harus mengandung:
                             • Minimal 3 kata
-                            • Setidaknya satu hashtag (#)
-                            • Mengandung salah satu hashtag
-                            • #fwbboy,#fwbgirl,#spillthetea,#fwball""";
+                            • Setidaknya satu hashtag (#)""";
         sendMessage(chatId, errorMessage, telegramClient);
     }
 
