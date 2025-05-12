@@ -3,6 +3,7 @@ package com.telegram.menfess.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
 
 
 @Getter
@@ -22,12 +23,11 @@ public class RepliedMessage {
     @JoinColumn(name = "message_id")
     private Messages repliedMessageId;
 
-    private Long repliedAt;
+    private LocalDateTime repliedAt;
 
     @ManyToOne
     @JoinColumn(name = "user_id")
     private User user;
-
 
 
 

@@ -10,4 +10,5 @@ public interface MessagesRepository extends JpaRepository<Messages, String> {
 
 
     Messages findByMessageId(Integer messageId);
+
 }

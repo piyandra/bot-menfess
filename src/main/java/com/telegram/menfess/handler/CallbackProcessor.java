@@ -2,9 +2,7 @@ package com.telegram.menfess.handler;
 
 import org.slf4j.Logger;
 import org.springframework.stereotype.Component;
-import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
-import org.telegram.telegrambots.meta.api.methods.send.SendPhoto;
-import org.telegram.telegrambots.meta.api.methods.send.SendVideo;
+import org.telegram.telegrambots.meta.api.methods.send.*;
 import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -35,6 +33,19 @@ public interface CallbackProcessor {
             return null;
         }
     }
+    default Message sendAudio(long chatId, String audioId, String message, TelegramClient telegramClient) {
+        try {
+            SendVoice audio = SendVoice.builder()
+                    .voice(new InputFile(audioId))
+                    .chatId(chatId)
+                    .caption(message)
+                    .parseMode("HTML")
+                    .build();
+            return telegramClient.execute(audio);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     default void editMessageSuccessSendMenfess(long chatId, int messageId, String text, InlineKeyboardMarkup inlineKeyboardMarkup, TelegramClient telegramClient) {
         try {
@@ -43,6 +54,7 @@ public interface CallbackProcessor {
                     .chatId(chatId)
                     .text(text)
                     .replyMarkup(inlineKeyboardMarkup)
+                    .parseMode("HTML")
                     .build();
             telegramClient.execute(message);
         } catch (Exception e) {

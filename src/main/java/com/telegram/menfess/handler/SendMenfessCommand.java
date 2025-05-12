@@ -1,10 +1,10 @@
 package com.telegram.menfess.handler;
 
-import com.telegram.menfess.entity.FileType;
-import com.telegram.menfess.entity.MenfessData;
-import com.telegram.menfess.entity.Messages;
+import com.telegram.menfess.entity.*;
 import com.telegram.menfess.service.MenfessDataService;
 import com.telegram.menfess.service.MessageService;
+import com.telegram.menfess.service.RepliedMessageService;
+import com.telegram.menfess.service.UserService;
 import com.telegram.menfess.utils.ButtonConfirmation;
 import com.telegram.menfess.utils.MessageUtils;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +19,7 @@ import org.telegram.telegrambots.meta.api.objects.messageorigin.MessageOriginCha
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -34,6 +35,8 @@ public class SendMenfessCommand implements CommandProcessor {
     private final MenfessDataService menfessDataService;
     private final MessageUtils messageUtils;
     private final MessageService messageService;
+    private final RepliedMessageService repliedMessageService;
+    private final UserService userService;
 
     @Value("${channel.username}")
     private String channelUsername;
@@ -57,6 +60,9 @@ public class SendMenfessCommand implements CommandProcessor {
 
             if (message.getForwardOrigin() instanceof MessageOriginChannel originChannel) {
                 if (originChannel.getChat().getId().equals(Long.parseLong(channelId))) {
+                    if (!messageText.contains("#")) {
+                        return;
+                    }
                     sendReportInstructionsMessage(message, telegramClient);
                 }
                 return;
@@ -120,6 +126,14 @@ public class SendMenfessCommand implements CommandProcessor {
                     message.getMessageId(),
                     telegramClient
             );
+            repliedMessageService.saveRepliedMessage(RepliedMessage.builder()
+                            .repliedAt(LocalDateTime.now())
+                            .user(userService.saveUser(User.builder()
+                                            .username(null)
+                                            .id(originalMessage.getUser().getId())
+                                    .build()))
+                            .repliedMessageId(messageService.findByMessageId(forwardFromMessageId))
+                    .build());
         }
     }
 
@@ -186,6 +200,8 @@ public class SendMenfessCommand implements CommandProcessor {
             return FileType.VIDEOS;
         } else if (message.hasPhoto()) {
             return FileType.PHOTOS;
+        } else if (message.hasVoice()) {
+            return FileType.AUDIO;
         }
         return FileType.TEXT;
     }
@@ -194,6 +210,7 @@ public class SendMenfessCommand implements CommandProcessor {
         return switch (fileType) {
             case VIDEOS -> message.getVideo().getFileId();
             case PHOTOS -> getLargestPhotoFileId(message.getPhoto());
+            case AUDIO -> message.getVoice().getFileId();
             default -> null;
         };
     }
