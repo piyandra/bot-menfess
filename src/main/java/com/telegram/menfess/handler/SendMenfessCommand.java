@@ -10,6 +10,7 @@ import com.telegram.menfess.utils.MessageUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.PhotoSize;
@@ -19,9 +20,12 @@ import org.telegram.telegrambots.meta.api.objects.messageorigin.MessageOriginCha
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
+import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
@@ -41,11 +45,23 @@ public class SendMenfessCommand implements CommandProcessor {
     @Value("${channel.username}")
     private String channelUsername;
 
+    @Value("${default.hashtag}")
+    private String hashtag;
+
     @Value("${owner.id}")
     private String ownerId;
 
     @Value("${channel.id}")
     private String channelId;
+
+    private List<String> list = new ArrayList<>();
+    
+    @PostConstruct
+    public void init() {
+        if (hashtag != null) {
+            list = Arrays.stream(hashtag.split(",")).toList();
+        }
+    }
 
     @Override
     public String commands() {
@@ -53,6 +69,7 @@ public class SendMenfessCommand implements CommandProcessor {
     }
 
     @Override
+    @Async
     public CompletableFuture<Void> process(Update update, TelegramClient telegramClient) {
         return CompletableFuture.runAsync(() -> {
             Message message = update.getMessage();
@@ -73,7 +90,9 @@ public class SendMenfessCommand implements CommandProcessor {
                 return;
             }
 
-            if (!isValidMessage(messageText) || !message.isUserMessage()) {
+            if (!isValidMessage(messageText)
+                    || !message.isUserMessage()
+                    || Arrays.stream(messageText.split("\\s+")).noneMatch(list::contains)) {
                 return;
             }
 
@@ -174,7 +193,9 @@ public class SendMenfessCommand implements CommandProcessor {
                             
                             Pesan harus mengandung:
                             • Minimal 3 kata
-                            • Setidaknya satu hashtag (#)""";
+                            • Setidaknya satu hashtag (#)
+                            • Mengandung salah satu hashtag
+                            • #fwbboy,#fwbgirl,#spillthetea,#fwball""";
         sendMessage(chatId, errorMessage, telegramClient);
     }
 
