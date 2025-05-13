@@ -13,10 +13,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage;
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.EditMessageText;
 import org.telegram.telegrambots.meta.api.objects.PhotoSize;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.messageorigin.MessageOriginChannel;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
@@ -42,14 +45,14 @@ public class SendMenfessCommand implements CommandProcessor {
     @Value("${channel.username}")
     private String channelUsername;
 
-
     @Value("${owner.id}")
     private String ownerId;
 
     @Value("${channel.id}")
     private String channelId;
 
-
+    @Value("${bot.token}")
+    private String botToken;
 
     @Override
     public String commands() {
@@ -60,50 +63,62 @@ public class SendMenfessCommand implements CommandProcessor {
     @Async
     public CompletableFuture<Void> process(Update update, TelegramClient telegramClient) {
         return CompletableFuture.runAsync(() -> {
-            Message message = update.getMessage();
-            String messageText = message.hasText() ? message.getText() : "";
+            try {
+                Message message = update.getMessage();
+                if (message == null) {
+                    log.warn("Received update without message");
+                    return;
+                }
 
-            if (message.getForwardOrigin() instanceof MessageOriginChannel originChannel) {
-                if (originChannel.getChat().getId().equals(Long.parseLong(channelId))) {
-                    if (!messageText.contains("#")) {
-                        return;
-                    }
+                String messageText = message.hasText() ? message.getText() : "";
+
+                if (handleForwardedChannelMessage(message, messageText, telegramClient)) {
+                    return;
+                }
+
+                if (isGroupMessageWithReply(message)) {
+                    handleGroupReply(update, telegramClient);
+                    return;
+                }
+
+                if (!isValidMessage(messageText) || !message.isUserMessage()) {
+                    return;
+                }
+
+                processValidMessage(message, telegramClient);
+            } catch (Exception e) {
+                log.error("Error processing message: ", e);
+            }
+        });
+    }
+
+    private boolean handleForwardedChannelMessage(Message message, String messageText, TelegramClient telegramClient) {
+        if (message.getForwardOrigin() instanceof MessageOriginChannel originChannel) {
+            if (originChannel.getChat().getId().equals(Long.parseLong(channelId))) {
+                if (messageText.contains("#")) {
                     sendReportInstructionsMessage(message, telegramClient);
                 }
-                return;
+                return true;
             }
-
-            if (isGroupMessageWithReply(message)) {
-                handleGroupReply(update, telegramClient);
-                return;
-            }
-
-            if (!isValidMessage(messageText)
-                    || !message.isUserMessage()) {
-                return;
-            }
-
-            processValidMessage(message, telegramClient);
-        });
+            return true;
+        }
+        return false;
     }
 
     private void sendReportInstructionsMessage(Message message, TelegramClient telegramClient) {
         SendMessage sendMessage = SendMessage.builder()
                 .chatId(message.getChatId())
                 .text("""
-												🚩 <b>Lihat konten yang melanggar?</b>
-												
-												Gunakan perintah <code>!lapor</code> untuk melaporkan menfess ini ke admin kami.
-												
-												👮‍♂️ Bantu kami menjaga komunitas tetap aman dan nyaman!""")
+                    🚩 <b>Lihat konten yang melanggar?</b>
+                    
+                    Gunakan perintah <code>!lapor</code> untuk melaporkan menfess ini ke admin kami.
+                    
+                    👮‍♂️ Bantu kami menjaga komunitas tetap aman dan nyaman!""")
                 .parseMode("HTML")
                 .replyToMessageId(message.getMessageId())
                 .build();
-        try {
-            telegramClient.execute(sendMessage);
-        } catch (TelegramApiException e) {
-            throw new RuntimeException(e);
-        }
+        
+        executeWithErrorHandling(telegramClient, sendMessage, "Failed to send report instructions");
     }
 
     private boolean isGroupMessageWithReply(Message message) {
@@ -117,53 +132,79 @@ public class SendMenfessCommand implements CommandProcessor {
         Integer forwardFromMessageId = message.getReplyToMessage().getForwardFromMessageId();
         Messages originalMessage = messageService.findByMessageId(forwardFromMessageId);
 
-        if (originalMessage != null) {
-            if (message.getText().contains("!lapor")) {
-                String reportMessage = message.getText().replace("!lapor", "") +
-                        String.format(" https://t.me/%s/%s", channelUsername, forwardFromMessageId);
-                warnFromUser(Long.parseLong(ownerId), reportMessage, telegramClient);
-                sendReportConfirmationMessage(message, telegramClient);
-                return;
-            }
-
-            sendNotificationToUserReplied(
-                    originalMessage.getUser().getId(),
-                    forwardFromMessageId,
-                    message.getMessageId(),
-                    telegramClient
-            );
-            repliedMessageService.saveRepliedMessage(RepliedMessage.builder()
-                            .repliedAt(LocalDateTime.now())
-                            .user(userService.saveUser(User.builder()
-                                            .username(null)
-                                            .id(originalMessage.getUser().getId())
-                                    .build()))
-                            .repliedMessageId(messageService.findByMessageId(forwardFromMessageId))
-                    .build());
+        if (originalMessage == null && !message.getFrom().getId().equals(Long.parseLong(botToken.split(":")[0]))) {
+            log.warn("Could not find original message for reply: {}", forwardFromMessageId);
+            return;
         }
+
+        // Handle report command
+        if (message.hasText() && message.getText().contains("!lapor")) {
+            handleReportCommand(message, forwardFromMessageId, telegramClient);
+            return;
+        }
+        handleRegularReply(message, originalMessage, telegramClient);
+    }
+
+    private void handleReportCommand(Message message, Integer forwardFromMessageId, TelegramClient telegramClient) {
+        String reportMessage = message.getText().replace("!lapor", "") +
+                String.format(" https://t.me/%s/%s", channelUsername, forwardFromMessageId);
+        
+        warnFromUser(Long.parseLong(ownerId), reportMessage, telegramClient);
+        sendReportConfirmationMessage(message, telegramClient);
+    }
+
+    private void handleRegularReply(Message message, Messages originalMessage, TelegramClient telegramClient) {
+        sendNotificationToUserReplied(
+                originalMessage.getUser().getId(),
+                originalMessage.getMessageId(),
+                message.getMessageId(),
+                buttonConfirmation.replyAnonymous(
+                        message.getChatId(), 
+                        message.getMessageId(), 
+                        originalMessage.getMessageId()
+                ),
+                telegramClient
+        );
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                repliedMessageService.saveRepliedMessage(RepliedMessage.builder()
+                        .repliedAt(LocalDateTime.now())
+                        .user(userService.saveUser(User.builder()
+                                        .username(null)
+                                        .id(originalMessage.getUser().getId())
+                                .build()))
+                        .repliedMessageId(messageService.findByMessageId(originalMessage.getMessageId()))
+                        .build());
+            } catch (Exception e) {
+                log.error("Failed to save replied message: ", e);
+            }
+        });
     }
 
     private void sendReportConfirmationMessage(Message message, TelegramClient telegramClient) {
         SendMessage sendMessage = SendMessage.builder()
                 .chatId(message.getChatId())
                 .text("""
-												🚨 <b>Laporan Terkirim!</b> 📢
-												
-												✅ Pesan telah berhasil dilaporkan ke pemilik bot.
-												
-												🙏 Terima kasih atas kontribusi Anda dalam menjaga kualitas komunitas kami.""")
+                    🚨 <b>Laporan Terkirim!</b> 📢
+                    
+                    ✅ Pesan telah berhasil dilaporkan ke pemilik bot.
+                    
+                    🙏 Terima kasih atas kontribusi Anda dalam menjaga kualitas komunitas kami.""")
                 .parseMode("HTML")
                 .replyToMessageId(message.getMessageId())
                 .build();
-        try {
-            telegramClient.execute(sendMessage);
-        } catch (TelegramApiException e) {
-            throw new RuntimeException(e);
-        }
+        
+        executeWithErrorHandling(telegramClient, sendMessage, "Failed to send report confirmation");
     }
 
     private void processValidMessage(Message message, TelegramClient telegramClient) {
         String content = message.getCaption() != null ? message.getCaption() : message.getText();
+
+        if (userService.isUserState(message.getChatId()) && message.isUserMessage()) {
+            processReplyStateMessage(message, telegramClient);
+            return;
+        }
 
         messageUtils.process(content).ifPresentOrElse(
                 messages -> {
@@ -173,14 +214,64 @@ public class SendMenfessCommand implements CommandProcessor {
                 () -> sendInvalidMessageError(message.getChatId(), telegramClient)
         );
     }
+    
+    private void processReplyStateMessage(Message message, TelegramClient telegramClient) {
+        User userById = userService.findUserById(message.getChatId());
+        if (userById == null) {
+            log.warn("User not found for chat ID: {}", message.getChatId());
+            return;
+        }
+        
+        int messageId = userById.getUserMessageId();
+        int channelMessageId = userById.getChannelRepliedMessageId();
+
+        CompletableFuture.runAsync(() -> 
+            userService.setReplyState(message.getChatId(), false, 0, 0, 0L)
+        );
+
+        editMessageSuccessReplyMenfess(
+                userById.getId(), 
+                messageId, 
+                "Balasan Sudah Terkirim",
+                telegramClient
+        );
+
+        SendMessage sendMessage = SendMessage.builder()
+                .chatId(userById.getGroupId())
+                .replyToMessageId(channelMessageId)
+                .text(String.format("<i>Sender: '%s'</i>", message.getText()))
+                .parseMode("HTML")
+                .build();
+        
+        try {
+            telegramClient.execute(sendMessage);
+
+            EditMessageText messageText = EditMessageText.builder()
+                    .text("<i>Pesan Sudah Terkirim</i>")
+                    .chatId(message.getChatId())
+                    .messageId(message.getMessageId() - 1)
+                    .parseMode("HTML")
+                    .build();
+            telegramClient.execute(messageText);
+
+            telegramClient.execute(DeleteMessage.builder()
+                    .chatId(message.getChatId())
+                    .messageId(message.getMessageId())
+                    .build());
+                    
+        } catch (TelegramApiException e) {
+            log.error("Failed to process reply state message: ", e);
+        }
+    }
 
     private void sendInvalidMessageError(long chatId, TelegramClient telegramClient) {
         String errorMessage = """
-                            ❌ <b>Pesan Tidak Valid</b>
-                            
-                            Pesan harus mengandung:
-                            • Minimal 3 kata
-                            • Setidaknya satu hashtag (#)""";
+                ❌ <b>Pesan Tidak Valid</b>
+                
+                Pesan harus mengandung:
+                • Minimal 3 kata
+                • Setidaknya satu hashtag (#)""";
+                
         sendMessage(chatId, errorMessage, telegramClient);
     }
 
@@ -243,6 +334,7 @@ public class SendMenfessCommand implements CommandProcessor {
     public void sendNotificationToUserReplied(long chatId,
                                               Integer messageId,
                                               Integer commentId,
+                                              InlineKeyboardMarkup markup,
                                               TelegramClient telegramClient) {
         try {
             String[] greetings = {
@@ -269,9 +361,10 @@ public class SendMenfessCommand implements CommandProcessor {
                     "Percakapan berlanjut... ketuk untuk melihat!"
             };
 
-            String greeting = greetings[(int)(Math.random() * greetings.length)];
-            String reaction = reactions[(int)(Math.random() * reactions.length)];
-            String callToAction = callToActions[(int)(Math.random() * callToActions.length)];
+            int randomIndex = (int)(Math.random() * greetings.length);
+            String greeting = greetings[randomIndex];
+            String reaction = reactions[randomIndex]; 
+            String callToAction = callToActions[randomIndex];
 
             String notificationText = String.format(
                     "<b>%s</b>\n\n%s\n\n🔗 <b>Message Link:</b> https://t.me/%s/%s?comment=%s\n\n%s",
@@ -281,26 +374,31 @@ public class SendMenfessCommand implements CommandProcessor {
                     .chatId(chatId)
                     .text(notificationText)
                     .parseMode("HTML")
+                    .replyMarkup(markup)
                     .build();
 
             telegramClient.execute(message);
         } catch (Exception e) {
-            log.error("Failed to send reply notification", e);
-            throw new RuntimeException(e);
+            log.error("Failed to send reply notification: ", e);
         }
     }
 
     public void warnFromUser(long chatId, String message, TelegramClient telegramClient) {
+        SendMessage sendMessage = SendMessage.builder()
+                .chatId(chatId)
+                .text(message)
+                .parseMode("HTML")
+                .build();
+                
+        executeWithErrorHandling(telegramClient, sendMessage, "Failed to send warning message");
+    }
+    
+    // Helper method to handle common telegram API execution pattern with error handling
+    private void executeWithErrorHandling(TelegramClient telegramClient, SendMessage message, String errorMsg) {
         try {
-            SendMessage sendMessage = SendMessage.builder()
-                    .chatId(chatId)
-                    .text(message)
-                    .parseMode("HTML")
-                    .build();
-            telegramClient.execute(sendMessage);
+            telegramClient.execute(message);
         } catch (Exception e) {
-            log.error("Failed to send warning message", e);
-            throw new RuntimeException(e);
+            log.error(errorMsg + ": ", e);
         }
     }
 }

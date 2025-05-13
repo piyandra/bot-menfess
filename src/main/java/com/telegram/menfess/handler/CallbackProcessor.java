@@ -8,6 +8,7 @@ import org.telegram.telegrambots.meta.api.objects.InputFile;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.message.Message;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.generics.TelegramClient;
 
 import java.util.concurrent.CompletableFuture;
@@ -87,6 +88,21 @@ public interface CallbackProcessor {
         } catch (Exception e) {
             log.error("Error sending Video: {}", e.getMessage());
             return null;
+        }
+    }
+
+    default void editMessageReplyToUserMenfess(Long chatId, int messageId, String text, InlineKeyboardMarkup inlineKeyboardMarkup, TelegramClient telegramClient) {
+        try {
+            EditMessageText message = EditMessageText.builder()
+                    .messageId(messageId)
+                    .chatId(chatId)
+                    .text(text)
+                    .replyMarkup(inlineKeyboardMarkup)
+                    .parseMode("HTML")
+                    .build();
+            telegramClient.execute(message);
+        } catch (TelegramApiException e) {
+            log.error("Error Edit message: {}", e.getMessage());
         }
     }
 }

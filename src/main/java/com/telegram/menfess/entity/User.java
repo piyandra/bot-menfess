@@ -25,7 +25,12 @@ public class User {
     @OneToMany(mappedBy = "user")
     private List<RepliedMessage> repliedMessages;
 
-    private boolean isJoined;
+    private boolean isReplyState;
+    private int channelRepliedMessageId;
+
+    private int userMessageId;
+
+    private long groupId;
 
     private Long joinUntil;
 }

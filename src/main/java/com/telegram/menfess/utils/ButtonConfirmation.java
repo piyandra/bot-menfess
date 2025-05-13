@@ -51,8 +51,6 @@ public class ButtonConfirmation {
         return InlineKeyboardMarkup.builder().keyboard(inlineKeyboardRows).build();
     }
     public InlineKeyboardMarkup notJoinedChannel(String channelUsername, String callbackData) {
-
-
         List<InlineKeyboardRow> inlineKeyboardRows = new ArrayList<>();
         InlineKeyboardRow inlineKeyboardRow = new InlineKeyboardRow();
 
@@ -68,6 +66,19 @@ public class ButtonConfirmation {
                 .build());
 
 
+        inlineKeyboardRows.add(inlineKeyboardRow);
+        return InlineKeyboardMarkup.builder().keyboard(inlineKeyboardRows).build();
+    }
+
+    public InlineKeyboardMarkup replyAnonymous(long groupId, int messageId, int messageReplyId) {
+        List<InlineKeyboardRow> inlineKeyboardRows = new ArrayList<>();
+        InlineKeyboardRow inlineKeyboardRow = new InlineKeyboardRow();
+
+        inlineKeyboardRow.add(InlineKeyboardButton
+                .builder()
+                .callbackData("reply_" + groupId + "_" + messageId + "_" + messageReplyId)
+                .text("Balas Pesan")
+                .build());
         inlineKeyboardRows.add(inlineKeyboardRow);
         return InlineKeyboardMarkup.builder().keyboard(inlineKeyboardRows).build();
     }

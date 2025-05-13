@@ -27,13 +27,13 @@ public class UserService {
     @Transactional
     public void addJoinRequest(Long id) {
         userRepository.findUsersById(id).ifPresentOrElse(user -> {
-            user.setJoined(true);
+            user.setReplyState(false);
             user.setJoinUntil(System.currentTimeMillis() + 1000 * 60 * 60);
             userRepository.save(user);
         }, () -> {
             User user = new User();
             user.setId(id);
-            user.setJoined(true);
+            user.setReplyState(false);
             user.setJoinUntil(System.currentTimeMillis() + 1000 * 60 * 60);
             userRepository.save(user);
         });
@@ -58,5 +58,32 @@ public class UserService {
         } else {
             return null;
         }
+    }
+    @Transactional
+    public boolean isUserState(Long id) {
+        Optional<User> optionalUser = userRepository.findById(id);
+        if (optionalUser.isPresent()) {
+            User user = optionalUser.get();
+            return user.isReplyState();
+        }
+        return false;
+    }
+    public void setReplyState(Long id, boolean state, int channelRepliedMessageId, int userMessageId, long groupId) {
+        Optional<User> optionalUser = userRepository.findById(id);
+        if (optionalUser.isPresent()) {
+            log.info("User found with ID: {}", id);
+            User user = optionalUser.get();
+            user.setReplyState(state);
+            user.setChannelRepliedMessageId(channelRepliedMessageId);
+            user.setUserMessageId(userMessageId);
+            user.setGroupId(groupId);
+            userRepository.save(user);
+        } else {
+            log.warn("User with ID: {} not found, cannot set reply state.", id);
+        }
+    }
+    @Transactional
+    public User findUserById(Long id) {
+        return userRepository.findById(id).orElse(null);
     }
 }
